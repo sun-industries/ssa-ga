@@ -70,7 +70,7 @@ struct Time
     int day;
     int hr;
     int mi;
-    double sec;
+    int sec;
 };
 
 
@@ -114,30 +114,8 @@ struct ObserveResult {
 
 struct TickResult : Geodetic {
     std::string satnum;
-    // 0 - means no errors
-    // 1 - mean elements, ecc >= 1.0 or ecc < -0.001 or a < 0.95 er
-	// 2 - mean motion less than 0.0
-	// 3 - pert elements, ecc < 0.0  or  ecc > 1.0
-	// 4 - semi-latus rectum < 0.0
-	// 5 - epoch elements are sub-orbital
-	// 6 - satellite has decayed
-    int errcode = 0;
     bool overfly = false; // if is in the observer FOV
-    bool sunlit = false;
     bool visible = false; // if overfly, is night and has sun light
-};
-
-struct TickResults {
-    std::vector<TickResult> sats;
-    double sunLat;
-    double sunLon; 
-};
-
-struct HistogramItem {
-    Time time;
-    int overflyCount = 0;
-    int sunlitCount = 0;
-    int visibleCount = 0;
 };
 
 EcfV3 geodeticToEcf(Geodetic geodetic);

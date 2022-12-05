@@ -27,19 +27,14 @@
 #include "transforms.cpp"
 #include "transforms.hpp"
 #include "solar.cpp"
-#include "solar2.cpp"
 
 using namespace emscripten;
 
 std::vector<elsetrec> satrecs;
 std::map<std::string, SatLogItem> satLog;
 std::vector<SatTableRow> satTable;
-std::vector<HistogramItem> histogram;
-
 Observer observer;
 volatile bool isRecording = false;
-volatile double sunZenithMax = 112;
-volatile double sunZenithMin = 100;
 
 extern "C" elsetrec twoline2satrec(std::string tleline1, std::string tleline2)
 {
@@ -68,7 +63,7 @@ extern "C" elsetrec twoline2satrec(std::string tleline1, std::string tleline2)
     return satrec;
 };
 
-extern "C" PosVel predict(elsetrec& satrec, int year, int  mon, int day, int hr, int minute, double sec) {
+extern "C" PosVel predict(elsetrec& satrec, int year, int  mon, int day, int hr, int minute, int sec) {
 
     double jd, jdFrac;
     SGP4Funcs::jday_SGP4(year, mon, day, hr, minute, sec, jd, jdFrac);
@@ -98,7 +93,7 @@ extern "C" PosVel predict(elsetrec& satrec, int year, int  mon, int day, int hr,
 }
 
 extern "C" std::vector<PosVel> predict2(std::vector<elsetrec>& satrecs, 
-int year, int  mon, int day, int hr, int minute, double sec)
+int year, int  mon, int day, int hr, int minute, int sec)
 {
     std::vector<PosVel> posvels;
     double jd, jdFrac;
@@ -140,7 +135,6 @@ extern "C" size_t init(std::string tle_string)
     satrecs.clear();
     satLog.clear();
     satTable.clear();
-    histogram.clear();
     observer.defined = false;
 
     std::stringstream tle_stream;
@@ -154,10 +148,10 @@ extern "C" size_t init(std::string tle_string)
         has_more = (bool) std::getline(tle_stream, line1, '\n');
         if(has_more) {
             has_more = (bool) std::getline(tle_stream, line2, '\n');
-            //if(has_more) {
+            if(has_more) {
                 elsetrec satrec = twoline2satrec(line1, line2);
                 satrecs.push_back(satrec);
-            //}
+            }
         }
     } while(has_more);
 
@@ -168,7 +162,6 @@ extern "C" void cleanRecords() {
     isRecording = false;
     satLog.clear();
     satTable.clear();
-    histogram.clear();
 }
 
 extern "C" void setObserver(Observer observer_) {
@@ -210,16 +203,12 @@ extern "C" std::vector<elsetrec> getSatrecs() {
     return satrecs;
 }
 
-extern "C" std::vector<HistogramItem> getHistogram() {
-    return histogram;
-}
-
 /**
  * @brief
  * @note if observer.height = -1000, then we consider that observer = null
  * 
  */
-extern "C" TickResults tick(int year, int  mon, int day, int hr, int mi, double sec)
+extern "C" std::vector<TickResult> tick(int year, int  mon, int day, int hr, int mi, int sec)
 {
     std::vector<TickResult> results;
 
@@ -233,42 +222,20 @@ extern "C" TickResults tick(int year, int  mon, int day, int hr, int mi, double 
     solar::EclipseStatus eclipse_status;
     EciV3 pos_eci;
 
+    solar::V4 solarVector;
+    TickResult tr;
     Time time = { year, mon, day, hr, mi, sec };
 
-    solar::V4 solarVector = solar::calculateSolarPosition(jd + jdFrac);
-    EciV3 sun_pos_eci;
-    sun_pos_eci.x = solarVector.x;
-    sun_pos_eci.y = solarVector.y;
-    sun_pos_eci.z = solarVector.z;
-    auto sun_geodetic = eciToGeodetic(sun_pos_eci, gmst);
-    double sunLat = radiansToDegrees(sun_geodetic.latitude);
-    double sunLon = radiansToDegrees(sun_geodetic.longitude);
-
-    double sunZenith;
-    double sunElevation;
     if(observer.defined) {
-        EcfV3 sun_pos_ecf = eciToEcf(sun_pos_eci, gmst);
-        LookAngles sunLookAngles = ecfToLookAngles(observer, sun_pos_ecf);
-        sunElevation = radiansToDegrees(sunLookAngles.elevation);
-        sunZenith = solar2::sun_zenith_angle(time, observer.longitude, observer.latitude);
-        //printf("sun:zenith=%f elevation=%f sum=%f \n", sunZenith, sunElevation, sunZenith, sunElevation);
+        solarVector = solar::calculateSolarPosition(jd + jdFrac);
     }
-
-    int overflyCount = 0;
-    int sunlitCount = 0; // only sunlit that overfly
-    int visibleCount = 0;
 
     for(elsetrec& satrec : satrecs) {
 
-        TickResult tr;
         m = (jd - satrec.jdsatepoch) * MINUTES_PER_DAY
         + (jdFrac - satrec.jdsatepochF) * MINUTES_PER_DAY;
 
         SGP4Funcs::sgp4(satrec, m, pos, vel);
-        if(satrec.error != 0) {
-            tr.errcode = satrec.error;
-            continue;
-        }
 
         pos_eci.x = pos[0];
         pos_eci.y = pos[1];
@@ -288,9 +255,6 @@ extern "C" TickResults tick(int year, int  mon, int day, int hr, int mi, double 
         tr.overfly = false;
         tr.visible = false;
 
-        eclipse_status = satEclipsed(pos_eci, solarVector);
-        tr.sunlit = !eclipse_status.eclipsed;
-
         // has ground observer
         if(observer.defined) {
             
@@ -298,18 +262,11 @@ extern "C" TickResults tick(int year, int  mon, int day, int hr, int mi, double 
             LookAngles lookAngles = ecfToLookAngles(observer, pos_ecf);
 
             // adding to the satLog if is observable
-            if((lookAngles.elevation * rad2deg) >= observer.minElevation) {
-                
-                tr.overfly = true;
-                tr.visible = tr.sunlit && sunElevation <= -12.0;
+            if(lookAngles.elevation * (180.0/pi) >= observer.minElevation) {
 
-                overflyCount++;
-                if(tr.sunlit) {
-                    sunlitCount++;
-                }
-                if(tr.visible) {
-                    visibleCount++;
-                }
+                eclipse_status = satEclipsed(pos_eci, solarVector);
+                tr.overfly = true;
+                tr.visible = !eclipse_status.eclipsed;
 
                 if(isRecording) {
                     // if there is not satnum already in satLog
@@ -400,22 +357,7 @@ extern "C" TickResults tick(int year, int  mon, int day, int hr, int mi, double 
         });*/
 
     }
-
-    if (isRecording) {
-        histogram.push_back({
-            time,
-            overflyCount,
-            sunlitCount,
-            visibleCount
-        });
-    }
-
-    TickResults tickResults;
-    tickResults.sats = results;
-    tickResults.sunLat = sunLat;
-    tickResults.sunLon = sunLon;
-
-    return tickResults;
+    return results;
 
 }
 
@@ -647,15 +589,8 @@ EMSCRIPTEN_BINDINGS(my_elsetrec)
         .field("latitude", &TickResult::latitude)
         .field("height", &TickResult::height)
         .field("satnum", &TickResult::satnum)
-        .field("errcode", &TickResult::errcode)
         .field("overfly", &TickResult::overfly)
-        .field("sunlit", &TickResult::sunlit)
         .field("visible", &TickResult::visible);
-
-    value_object<TickResults>("TickResults")
-        .field("sats", &TickResults::sats)
-        .field("sunLat", &TickResults::sunLat)
-        .field("sunLon", &TickResults::sunLon);
 
     value_object<Time>("Time")
         .field("year", &Time::year)
@@ -705,12 +640,6 @@ EMSCRIPTEN_BINDINGS(my_elsetrec)
         .field("line1", &Tle::line1)
         .field("line2", &Tle::line2);
 
-    value_object<HistogramItem>("HistogramItem")
-        .field("time", &HistogramItem::time)
-        .field("overflyCount", &HistogramItem::overflyCount)
-        .field("sunlitCount", &HistogramItem::sunlitCount)
-        .field("visibleCount", &HistogramItem::visibleCount);
-
     register_vector<Tle>("vector<Tle>");
     register_vector<elsetrec>("vector<elsetrec>");
     register_vector<PosVel>("vector<PosVel>");
@@ -720,7 +649,6 @@ EMSCRIPTEN_BINDINGS(my_elsetrec)
     register_vector<Time>("vector<Time>");
     register_vector<double>("vector<double>");
     register_vector<SatTableRow>("vector<SatTableRow>");
-    register_vector<HistogramItem>("vector<HistogramItem>");
 
     register_map<std::string, SatLogItem>("map<string, SatLogItem>");
 
@@ -744,11 +672,10 @@ EMSCRIPTEN_BINDINGS(my_elsetrec)
     function("geodeticToEcf", &geodeticToEcf);
     //function("topocentric", &topocentric);
     function("eciToGeodetic", &eciToGeodetic);
-    emscripten::function("eciToEcf", &eciToEcf);
+    function("eciToEcf", &eciToEcf);
     function("topocentricToLookAngles", &topocentricToLookAngles);
     function("ecfToLookAngles", &ecfToLookAngles);
     function("getSatrecs", &getSatrecs);
-    function("getHistogram", &getHistogram);
     
 }
 

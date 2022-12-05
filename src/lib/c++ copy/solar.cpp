@@ -6,8 +6,8 @@
 
 namespace solar {
 
-    const double ms2day = 1000.0 * 60.0 * 60.0 * 24.0; // milliseconds to day
-    const double deg2rad = pi / 180.0;
+    const double ms2day = 1000 * 60 * 60 * 24; // milliseconds to day
+    const double deg2rad = pi / 180;
     const double xkmper = 6.378137E3; // earth radius (km) wgs84
     const double astro_unit = 1.49597870691E8; // Astronomical unit - km (IAU 76)
     const double solar_radius = 6.96000E5; // solar radius - km (IAU 76)
@@ -32,15 +32,9 @@ namespace solar {
         return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
     }
 
-    /**
-     * @brief Sun position vector
-     * 
-     * @param jday 
-     * @return V4 the first X,Y,Z are the ECI position
-     */
     V4 calculateSolarPosition(double jday) {
 
-        double mjd = jday - 2415020.0;
+        double mjd = jday - 2415020.0; // DJD?
         double year = 1900.0 + mjd / 365.25;
         double T = (mjd + deltaET(year) / (ms2day / 1000)) / 36525.0;
         double M = deg2rad * fmod(358.47583 + fmod(35999.04975 * T, 360) - (0.000150 + 0.0000033 * T) * pow(T, 2), 360);
@@ -79,25 +73,23 @@ namespace solar {
         // earth = -1 * pos
         V3 earth;
         earth.x =  -1 * pos.x;
-        earth.y =  -1 * pos.y;
-        earth.z =  -1 * pos.z;
+        earth.x =  -1 * pos.y;
+        earth.x =  -1 * pos.z;
 
         // delta = angle(sol, earth)
         double dot = (sol.x * earth.x + sol.y * earth.y + sol.z * earth.z);
-        double delta = acos(dot / (
-            magnitude((V3){sol.x, sol.y, sol.z}) * magnitude(earth))
-        );
+        double delta = acos(dot / (magnitude((V3){sol.x, sol.y, sol.z}) * magnitude(earth)));
 
         double eclipseDepth = sd_earth - sd_sun - delta;
         bool eclipsed;
         if(sd_earth < sd_sun) {
-            eclipsed = false;
+        eclipsed = false;
         } else {
-            eclipsed = eclipseDepth >= 0;
+        eclipsed = eclipseDepth >= 0;
         }
         return {
-            eclipseDepth,
-            eclipsed
+        eclipseDepth,
+        eclipsed
         };
     }
 

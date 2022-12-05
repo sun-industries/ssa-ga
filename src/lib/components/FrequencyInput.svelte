@@ -65,7 +65,7 @@
 >
     <div class="flex flex-row items-baseline">
         <div class="min-w-3">
-            <input placeholder={`${valueSec}`} bind:this={inputNode} on:change={onEnter} type={inputType} value={valueFormatted} 
+            <input autocomplete="off" bind:this={inputNode} on:change={onEnter} type={inputType} value={valueFormatted} 
             class="w-6 bg-transparent transition-all text-right outline-none">
         </div>
         <small class="ml-1">{unitShow}</small>

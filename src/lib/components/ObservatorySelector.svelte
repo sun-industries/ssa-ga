@@ -6,10 +6,10 @@
   $: { observatory = observatories.find(obs => obs.name === selectedObsKey) }
 </script>
 
-<select
+<select on:change
   class="flex flex-row items-center
   bg-white bg-opacity-75 text-black px-2 py-1 ml-1 mt-1 select-none
-    text-shadow-xl border border-black rounded-sm font-medium"
+    text-shadow-xl border border-black rounded-sm font-medium {$$restProps.class}"
     bind:value={selectedObsKey}
 >
   {#each observatories as obs (obs.name)}
