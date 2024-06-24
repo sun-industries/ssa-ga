@@ -16,7 +16,7 @@
   //const CELESTRACK_URL = `https://cors-noproblem.herokuapp.com/https://www.celestrak.com/norad/elements/active.txt`;
   //const CELESTRACK_URL = 'https://proxy.cors.sh/https://www.celestrak.com/norad/elements/active.txt';
   //const CELESTRACK_URL = 'https://thingproxy.freeboard.io/fetch/https://www.celestrak.com/norad/elements/active.txt';
-  const CELESTRACK_URL = "https://cloudflare-cors-anywhere.sunindustries.workers.dev/?https://www.celestrak.com/norad/elements/active.txt"
+  const CELESTRACK_URL = "https://cloudflare-cors-anywhere.sunindustries.workers.dev/?https://celestrak.org/norad/elements/gp.php?GROUP=active&FORMAT=tle"
 
 
   let time = new Date();
